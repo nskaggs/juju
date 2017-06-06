@@ -832,58 +832,11 @@ func (api *API) AddRelation(args params.AddRelation) (params.AddRelationResults,
 	if err := api.check.ChangeAllowed(); err != nil {
 		return params.AddRelationResults{}, errors.Trace(err)
 	}
-
-	endpoints := make([]string, len(args.Endpoints))
-	// We may have a remote application passed in as the endpoint spec.
-	// We'll iterate the endpoints to check.
-	//isRemote := false
-	for i, ep := range args.Endpoints {
-		endpoints[i] = ep
-
-		// TODO(wallyworld) - re-implement when facade updates are done
-		//// If cross model relations not enabled, ignore remote endpoints.
-		//if !featureflag.Enabled(feature.CrossModelRelations) {
-		//	continue
-		//}
-		//
-		//// If the endpoint is not remote, skip it.
-		//// We first need to strip off any relation name
-		//// which may have been appended to the URL, then
-		//// we try parsing the URL.
-		//possibleURL := applicationUrlEndpointParse.ReplaceAllString(ep, "$url")
-		//relName := applicationUrlEndpointParse.ReplaceAllString(ep, "$relname")
-		//
-		//// If the URL parses, we need to look up the remote application
-		//// details and save to state.
-		//url, err := jujucrossmodel.ParseApplicationURL(possibleURL)
-		//if err != nil {
-		//	// Not a URL.
-		//	continue
-		//}
-		//// Save the remote application details into state.
-		//// TODO(wallyworld) - allow app name to be aliased
-		//alias := url.ApplicationName
-		//remoteApp, err := api.processRemoteApplication(url, alias)
-		//if err != nil {
-		//	return params.AddRelationResults{}, errors.Trace(err)
-		//}
-		//// The endpoint is named after the remote application name,
-		//// not the application name from the URL.
-		//endpoints[i] = remoteApp.Name()
-		//if relName != "" {
-		//	endpoints[i] = remoteApp.Name() + ":" + relName
-		//}
-		//isRemote = true
-	}
-	// If it's not a remote relation to another model then
-	// the user needs write access to the model.
-	//if !isRemote {
 	if err := api.checkCanWrite(); err != nil {
 		return params.AddRelationResults{}, errors.Trace(err)
 	}
-	//}
 
-	inEps, err := api.backend.InferEndpoints(endpoints...)
+	inEps, err := api.backend.InferEndpoints(args.Endpoints...)
 	if err != nil {
 		return params.AddRelationResults{}, errors.Trace(err)
 	}
@@ -929,15 +882,10 @@ func (api *API) DestroyRelation(args params.DestroyRelation) error {
 	return rel.Destroy()
 }
 
-// TODO(wallyworld) - we'll use this when the ConsumeDetails API is added.
-// applicationUrlEndpointParse is used to split an application url and optional
-// relation name into url and relation name.
-//var applicationUrlEndpointParse = regexp.MustCompile("(?P<url>.*[/.][^:]*)(:(?P<relname>.*)$)?")
-
 // Consume adds remote applications to the model without creating any
 // relations.
-func (api *API) Consume(args params.ConsumeApplicationArgs) (params.ConsumeApplicationResults, error) {
-	var consumeResults params.ConsumeApplicationResults
+func (api *API) Consume(args params.ConsumeApplicationArgs) (params.ErrorResults, error) {
+	var consumeResults params.ErrorResults
 	if !featureflag.Enabled(feature.CrossModelRelations) {
 		err := errors.Errorf(
 			"set %q feature flag to enable consuming remote applications",
@@ -952,28 +900,27 @@ func (api *API) Consume(args params.ConsumeApplicationArgs) (params.ConsumeAppli
 		return consumeResults, errors.Trace(err)
 	}
 
-	results := make([]params.ConsumeApplicationResult, len(args.Args))
+	results := make([]params.ErrorResult, len(args.Args))
 	for i, arg := range args.Args {
-		localName, err := api.consumeOne(arg)
-		results[i].LocalName = localName
+		err := api.consumeOne(arg)
 		results[i].Error = common.ServerError(err)
 	}
 	consumeResults.Results = results
 	return consumeResults, nil
 }
 
-func (api *API) consumeOne(arg params.ConsumeApplicationArg) (string, error) {
+func (api *API) consumeOne(arg params.ConsumeApplicationArg) error {
 	sourceModelTag, err := names.ParseModelTag(arg.SourceModelTag)
 	if err != nil {
-		return "", errors.Trace(err)
+		return errors.Trace(err)
 	}
 
 	appName := arg.ApplicationAlias
 	if appName == "" {
 		appName = arg.OfferName
 	}
-	remoteApp, err := api.saveRemoteApplication(sourceModelTag, appName, arg.ApplicationOffer)
-	return remoteApp.Name(), err
+	_, err = api.saveRemoteApplication(sourceModelTag, appName, arg.ApplicationOffer)
+	return err
 }
 
 // saveRemoteApplication saves the details of the specified remote application and its endpoints

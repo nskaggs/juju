@@ -47,10 +47,8 @@ func NewAddUnitCommandForTest(api serviceAddUnitAPI) cmd.Command {
 }
 
 // NewAddRelationCommandForTest returns an AddRelationCommand with the api provided as specified.
-func NewAddRelationCommandForTest(api ApplicationAddRelationAPI) modelcmd.ModelCommand {
-	cmd := &addRelationCommand{newAPIFunc: func() (ApplicationAddRelationAPI, error) {
-		return api, nil
-	}}
+func NewAddRelationCommandForTest(addAPI applicationAddRelationAPI, consumeAPI applicationConsumeDetailsAPI) modelcmd.ModelCommand {
+	cmd := &addRelationCommand{addRelationAPI: addAPI, consumeDetailsAPI: consumeAPI}
 	return modelcmd.Wrap(cmd)
 }
 
@@ -63,10 +61,14 @@ func NewRemoveRelationCommandForTest(api ApplicationDestroyRelationAPI) modelcmd
 }
 
 // NewConsumeCommandForTest returns a ConsumeCommand with the specified api.
-func NewConsumeCommandForTest(store jujuclient.ClientStore, api applicationConsumeAPI) cmd.Command {
-	c := &consumeCommand{api: api}
+func NewConsumeCommandForTest(
+	store jujuclient.ClientStore,
+	sourceAPI applicationConsumeDetailsAPI,
+	targetAPI applicationConsumeAPI,
+) cmd.Command {
+	c := &consumeCommand{sourceAPI: sourceAPI, targetAPI: targetAPI}
 	c.SetClientStore(store)
-	return modelcmd.WrapController(c)
+	return modelcmd.Wrap(c)
 }
 
 type Patcher interface {
