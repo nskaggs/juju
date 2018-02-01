@@ -1,5 +1,12 @@
 #!/usr/bin/env python
-"""Test migrating models between controllers of increasing versions."""
+""" TODO: Single line description of this assess script purpose.
+
+TODO: add description For:
+  - Juju features tested in this module
+  - Brief outline of what the test will do to undertake this
+  - Notes on any tricky details needed for the tests
+  - etc.
+"""
 
 from __future__ import print_function
 
@@ -16,7 +23,6 @@ from assess_model_migration import (
     _new_log_dir,
     assert_model_migrated_successfully,
     deploy_simple_server_to_new_model,
-    migrate_model_to_controller,
     )
 from jujupy.client import (
     get_stripped_version_number,
@@ -38,6 +44,19 @@ __metaclass__ = type
 
 log = logging.getLogger('assess_model_migration_versions')
 
+
+def create_bootstrap_environments(args):
+    stable_bsm = get_stable_juju(args, args.stable_juju_bin)
+    devel_bsm = BootstrapManager.from_args(args)
+
+    assert_stable_juju_suitable_for_testing(stable_bsm, devel_bsm)
+
+    # Need to make the bootstrap envs unique.
+    stable_bsm.temp_env_name = '{}-stable'.format(stable_bsm.temp_env_name)
+    devel_bsm.temp_env_name = '{}-devel'.format(devel_bsm.temp_env_name)
+    stable_bsm.log_dir = _new_log_dir(stable_bsm.log_dir, 'stable')
+    devel_bsm.log_dir = _new_log_dir(stable_bsm.log_dir, 'devel')
+    return stable_bsm, devel_bsm
 
 def assess_model_migration_versions(stable_bsm, devel_bsm, args):
     """Migrates an active model from stable to devel controller (twice).
@@ -183,17 +202,7 @@ def main(argv=None):
     args = parse_args(argv)
     configure_logging(args.verbose)
 
-    stable_bsm = get_stable_juju(args, args.stable_juju_bin)
-    devel_bsm = BootstrapManager.from_args(args)
-
-    assert_stable_juju_suitable_for_testing(stable_bsm, devel_bsm)
-
-    # Need to make the bootstrap envs unique.
-    stable_bsm.temp_env_name = '{}-stable'.format(stable_bsm.temp_env_name)
-    devel_bsm.temp_env_name = '{}-devel'.format(devel_bsm.temp_env_name)
-    stable_bsm.log_dir = _new_log_dir(stable_bsm.log_dir, 'stable')
-    devel_bsm.log_dir = _new_log_dir(stable_bsm.log_dir, 'devel')
-
+    stable_bsm, devel_bsm = create_bootstrap_environments(args)
     assess_model_migration_versions(stable_bsm, devel_bsm, args)
 
 
