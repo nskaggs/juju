@@ -37,6 +37,9 @@ var (
 	// mongod.
 	JujuMongod24Path = "/usr/lib/juju/bin/mongod"
 
+	// Mongod from streams.c.c we'll place here
+	//JujuMongodPath = "/usr/lib/juju/bin/mongod"
+
 	// This is NUMACTL package name for apt-get
 	numaCtlPkg = "numactl"
 )
@@ -45,13 +48,13 @@ var (
 type StorageEngine string
 
 const (
-	// JujuMongoPackage is the mongo package Juju uses when
+	// JujuMongo32Package is the mongo package Juju uses when
 	// installing mongo.
-	JujuMongoPackage = "juju-mongodb3.2"
+	JujuMongo32Package = "juju-mongodb3.2"
 
-	// JujuMongoToolsPackage is the mongo package Juju uses when
+	// JujuMongo32ToolsPackage is the mongo package Juju uses when
 	// installing mongo tools to get mongodump etc.
-	JujuMongoToolsPackage = "juju-mongo-tools3.2"
+	JujuMongo32ToolsPackage = "juju-mongo-tools3.2"
 
 	// MMAPV1 is the default storage engine in mongo db up to 3.x
 	MMAPV1 StorageEngine = "mmapv1"
@@ -730,8 +733,11 @@ func packagesForSeries(series string) ([]string, []string) {
 		return []string{"mongodb-server"}, []string{}
 	case "trusty":
 		return []string{"juju-mongodb"}, []string{}
+	case "xenial", "artful":
+		// xenial-era LTS use archive package
+		return []string{JujuMongoPackage, JujuMongoToolsPackage}, []string{}
 	default:
-		// xenial and onwards
+		// bionic and beyond uses streams
 		return []string{JujuMongoPackage, JujuMongoToolsPackage}, []string{}
 	}
 }

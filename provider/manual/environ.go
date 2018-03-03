@@ -274,6 +274,7 @@ wait_for_jujud
     exit 1
 }
 service %[3]s stop && logger --id stopped %[3]s
+# We may not have installed juju-mongo* (if it came from streams), but we should remove it anyway
 apt-get -y purge juju-mongo*
 apt-get -y autoremove
 rm -f /etc/init/juju*

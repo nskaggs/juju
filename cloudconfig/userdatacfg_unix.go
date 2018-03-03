@@ -417,6 +417,68 @@ func (w *unixConfigure) configureBootstrap() error {
 	return nil
 }
 
+func (w *unixConfigure) addDownloadDatabaseCmds() error {
+	database := w.icfg.DatabaseList()[0]
+	if strings.HasPrefix(database.URL, fileSchemePrefix) {
+		databaseData, err := ioutil.ReadFile(database.URL[len(fileSchemePrefix):])
+		if err != nil {
+			return err
+		}
+		w.conf.AddRunBinaryFile(path.Join(w.icfg.JujuDatabase(), "database.tar.gz"), []byte(databaseData), 0644)
+	} else {
+		curlCommand := curlCommand
+		var urls []string
+		for _, database := range w.icfg.DatabaseList() {
+			urls = append(urls, database.URL)
+		}
+		if w.icfg.Bootstrap != nil {
+			curlCommand += " --retry 10"
+			if w.icfg.DisableSSLHostnameVerification {
+				curlCommand += " --insecure"
+			}
+		} else {
+			// Allow up to 20 seconds for curl to make a connection. This prevents
+			// slow/broken routes from holding up others.
+			//
+			// TODO(axw) 2017-02-14 #1654943
+			// When we model spaces everywhere, we should give
+			// priority to the URLs that we know are accessible
+			// based on space overlap.
+			curlCommand += " --connect-timeout 20"
+
+			// Don't go through the proxy when downloading database from the controllers
+			curlCommand += ` --noproxy "*"`
+
+			// Our API server certificates are unusable by curl (invalid subject name),
+			// so we must disable certificate validation. It doesn't actually
+			// matter, because there is no sensitive information being transmitted
+			// and we verify the database' hash after.
+			curlCommand += " --insecure"
+		}
+		curlCommand += " -o $bin/database.tar.gz"
+		w.conf.AddRunCmd(cloudinit.LogProgressCmd("Fetching database version %s for %s", database.Version.Number, database.Version.Arch))
+		logger.Infof("Fetching mongodb: %s <%s>", curlCommand, urls)
+		w.conf.AddRunCmd(databaseDownloadCommand(curlCommand, urls))
+	}
+
+	w.conf.AddScripts(
+		fmt.Sprintf("sha256sum $bin/database.tar.gz > $bin/juju%s.sha256", database.Version),
+		fmt.Sprintf(`grep '%s' $bin/juju%s.sha256 || (echo "Database checksum mismatch"; exit 1)`,
+			database.SHA256, database.Version),
+		"tar zxf $bin/database.tar.gz -C $bin",
+	)
+
+	databaseJson, err := json.Marshal(database)
+	if err != nil {
+		return err
+	}
+	w.conf.AddScripts(
+		fmt.Sprintf("printf %%s %s > $bin/downloaded-database.txt", shquote(string(databaseJson))),
+	)
+
+	return nil
+}
+
 func (w *unixConfigure) addDownloadToolsCmds() error {
 	tools := w.icfg.ToolsList()[0]
 	if strings.HasPrefix(tools.URL, fileSchemePrefix) {
