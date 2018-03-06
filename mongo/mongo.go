@@ -37,9 +37,6 @@ var (
 	// mongod.
 	JujuMongod24Path = "/usr/lib/juju/bin/mongod"
 
-	// Mongod from streams.c.c we'll place here
-	//JujuMongodPath = "/usr/lib/juju/bin/mongod"
-
 	// This is NUMACTL package name for apt-get
 	numaCtlPkg = "numactl"
 )
@@ -738,7 +735,7 @@ func packagesForSeries(series string) ([]string, []string) {
 		return []string{JujuMongoPackage, JujuMongoToolsPackage}, []string{}
 	default:
 		// bionic and beyond uses streams
-		return []string{JujuMongoPackage, JujuMongoToolsPackage}, []string{}
+		return return []string{"mongodb"}, []string{}
 	}
 }
 
