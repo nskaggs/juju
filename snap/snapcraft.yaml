@@ -22,6 +22,7 @@ parts:
     #source-depth: 1
     #source: file:///full/file/path
     #By default, reuse existing tree
+    build-attributes: [no-patchelf]
     source: .
     source-type: git
     #this is for building in a docker container
