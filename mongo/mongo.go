@@ -37,6 +37,9 @@ var (
 	// mongod.
 	JujuMongod24Path = "/usr/lib/juju/bin/mongod"
 
+	// Mongod36Path is actually just the system path
+	Mongod36Path = "/usr/bin/mongod"
+
 	// This is NUMACTL package name for apt-get
 	numaCtlPkg = "numactl"
 )
@@ -193,6 +196,12 @@ var (
 		Patch:         "",
 		StorageEngine: WiredTiger,
 	}
+	// Mongo36wt represents 'mongodb-server-core' at version 3.6.x with WiredTiger
+	Mongo36wt = Version{Major: 3,
+		Minor:         6,
+		Patch:         "",
+		StorageEngine: WiredTiger,
+	}
 	// MongoUpgrade represents a sepacial case where an upgrade is in
 	// progress.
 	MongoUpgrade = Version{Major: 0,
@@ -207,6 +216,16 @@ var (
 // and fall back to the original mongo 2.4.
 func InstalledVersion() Version {
 	mgoVersion := Mongo24
+	// We change this for order of precedence. The issue is that Mongo36 is
+	// just /usr/bin/mongo which may not actually be 3.6 on Trusty/Xenial.
+	// We still prefer if /usr/lib/juju/bin/mong2.4 is available, or if
+	// /usr/lib/juju/mongo3.2/bin/mongod is available.
+	if binariesAvailable(Mongo36wt, os.Stat) {
+		mgoVersion = Mongo36wt
+	}
+	if binariesAvailable(Mongo24, os.Stat) {
+		mgoVersion = Mongo24
+	}
 	if binariesAvailable(Mongo32wt, os.Stat) {
 		mgoVersion = Mongo32wt
 	}
@@ -221,6 +240,9 @@ func binariesAvailable(v Version, statFunc func(string) (os.FileInfo, error)) bo
 	case Mongo24:
 		// 2.4 has a fixed path.
 		path = JujuMongod24Path
+	case Mongo36wt:
+		// 3.6 switched back to using the system mongod
+		path = Mongod36Path
 	default:
 		path = JujuMongodPath(v)
 	}
@@ -314,6 +336,17 @@ func mongoPath(
 		path, err := lookPath("mongod")
 		if err != nil {
 			logger.Infof("could not find %v or mongod in $PATH", JujuMongod24Path)
+			return "", err
+		}
+		return path, nil
+	case Mongo36wt:
+		if _, err := stat(Mongod36Path); err == nil {
+			return Mongod36Path, nil
+		}
+
+		path, err := lookPath("mongod")
+		if err != nil {
+			logger.Infof("could not find %v or mongod in $PATH", Mongod36Path)
 			return "", err
 		}
 		return path, nil
@@ -631,6 +664,29 @@ func installMongod(operatingsystem string, numaCtl bool) error {
 			return err
 		}
 	}
+	// XXX: UGLY HACK FOR TESTING
+	if operatingsystem == "bionic" {
+		if err := pacman.InstallPrerequisite(); err != nil {
+			return errors.Trace(err)
+		}
+		// AddRepository appears to have a bug. It seems to be quoting the
+		// archive, which leads to it trying to install something named *with*
+		// the quotes, rather than the actual archive.
+		// It uses string.Fields() and then passes in args[1:] but that breaks
+		// for quoted args because string.Fields() doesn't care about quotes.
+		// and wouldn't work anyway, because "foo bar" ends up getting passed as
+		// []string{`"foo`, `bar"`}
+		// if err := pacman.AddRepository("ppa:~racb/experimental"); err != nil {
+		// 	return errors.Trace(err)
+		// }
+		// https://bugs.launchpad.net/juju/+bug/1758074
+		if _, _, err := manager.RunCommandWithRetry("apt-add-repository --yes ppa:~racb/experimental", nil); err != nil {
+			return errors.Trace(err)
+		}
+		if err := pacman.Update(); err != nil {
+			return errors.Trace(err)
+		}
+	}
 
 	mongoPkgs, fallbackPkgs := packagesForSeries(operatingsystem)
 
@@ -695,9 +751,11 @@ func packagesForSeries(series string) ([]string, []string) {
 		return []string{"mongodb-server"}, []string{}
 	case "trusty":
 		return []string{"juju-mongodb"}, []string{}
-	default:
-		// xenial and onwards
+	case "xenial", "artful":
 		return []string{JujuMongoPackage, JujuMongoToolsPackage}, []string{}
+	default:
+		// Bionic and newer
+		return []string{"mongodb-server-core", "mongdb-clients"}, []string{}
 	}
 }
 
