@@ -220,14 +220,14 @@ func InstalledVersion() Version {
 	// just /usr/bin/mongo which may not actually be 3.6 on Trusty/Xenial.
 	// We still prefer if /usr/lib/juju/bin/mong2.4 is available, or if
 	// /usr/lib/juju/mongo3.2/bin/mongod is available.
+	if binariesAvailable(Mongo36wt, os.Stat) {
+		mgoVersion = Mongo36wt
+	}
 	if binariesAvailable(Mongo24, os.Stat) {
 		mgoVersion = Mongo24
 	}
 	if binariesAvailable(Mongo32wt, os.Stat) {
 		mgoVersion = Mongo32wt
-	}
-	if binariesAvailable(Mongo36wt, os.Stat) {
-		mgoVersion = Mongo36wt
 	}
 	return mgoVersion
 }
@@ -684,28 +684,28 @@ func installMongod(operatingsystem string, numaCtl bool) error {
 		}
 	}
 	// XXX: UGLY HACK FOR TESTING
-	//if operatingsystem == "bionic" {
-	if err := pacman.InstallPrerequisite(); err != nil {
-		return errors.Trace(err)
+	if operatingsystem == "bionic" {
+		if err := pacman.InstallPrerequisite(); err != nil {
+			return errors.Trace(err)
+		}
+		// AddRepository appears to have a bug. It seems to be quoting the
+		// archive, which leads to it trying to install something named *with*
+		// the quotes, rather than the actual archive.
+		// It uses string.Fields() and then passes in args[1:] but that breaks
+		// for quoted args because string.Fields() doesn't care about quotes.
+		// and wouldn't work anyway, because "foo bar" ends up getting passed as
+		// []string{`"foo`, `bar"`}
+		// if err := pacman.AddRepository("ppa:~racb/experimental"); err != nil {
+		// 	return errors.Trace(err)
+		// }
+		// https://bugs.launchpad.net/juju/+bug/1758074
+		if _, _, err := manager.RunCommandWithRetry("apt-add-repository --yes ppa:~racb/experimental", nil); err != nil {
+			return errors.Trace(err)
+		}
+		if err := pacman.Update(); err != nil {
+			return errors.Trace(err)
+		}
 	}
-	// AddRepository appears to have a bug. It seems to be quoting the
-	// archive, which leads to it trying to install something named *with*
-	// the quotes, rather than the actual archive.
-	// It uses string.Fields() and then passes in args[1:] but that breaks
-	// for quoted args because string.Fields() doesn't care about quotes.
-	// and wouldn't work anyway, because "foo bar" ends up getting passed as
-	// []string{`"foo`, `bar"`}
-	// if err := pacman.AddRepository("ppa:~racb/experimental"); err != nil {
-	// 	return errors.Trace(err)
-	// }
-	// https://bugs.launchpad.net/juju/+bug/1758074
-	if _, _, err := manager.RunCommandWithRetry("apt-add-repository --yes ppa:~racb/experimental", nil); err != nil {
-		return errors.Trace(err)
-	}
-	if err := pacman.Update(); err != nil {
-		return errors.Trace(err)
-	}
-	//}
 
 	mongoPkgs, fallbackPkgs := packagesForSeries(operatingsystem)
 
